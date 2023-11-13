@@ -139,3 +139,98 @@ Select rand() as numero_randon_del_0_al_1;
 
 /*min = 20 y max =250
 (rand() * (max-min+1))+min*/
+
+/*creando funcion que devuelve un numero aleatorio*/
+
+DELIMITER $$
+CREATE DEFINER=`root`@`localhost` FUNCTION `f_aleatorio`(min int, max int) RETURNS int
+BEGIN
+declare vresultado int;
+
+Select floor((rand()*(max - min + 1))+ min) into vresultado;
+RETURN vresultado;
+END$$
+
+DELIMITER ;
+
+select f_aleatorio(1,10);
+
+/*Creando funcion cliente aleatorio*/
+
+
+DELIMITER $$
+
+CREATE DEFINER=`root`@`localhost` FUNCTION `f_cliente_aleatorio`() RETURNS varchar(11) CHARSET utf8mb4
+BEGIN
+declare vresultado varchar(11);
+declare vmax int;
+declare valeatorio int;
+
+select count(*) into vmax from CLIENTES;
+
+set valeatorio  = f_aleatorio(1, vmax);
+
+set valeatorio = valeatorio -1;
+
+select DNI into vresultado from CLIENTES limit valeatorio , 1;
+RETURN vresultado;
+END$$
+
+DELIMITER ;
+
+select f_cliente_aleatorio();
+
+/* En este ejercicio, crea otra función para obtener el 
+producto y también el vendedor usando como base la función aleatorio.*/
+
+select * from PRODUCTOS;
+select * from VENDEDORES;
+
+/*Creando funcion para obtener producto aleatorio*/
+
+DELIMITER $$
+USE `empresa`$$
+CREATE FUNCTION `f_producto_aleatorio` ()
+RETURNS varchar(10)
+BEGIN
+declare vmax int;
+declare valeatorio int;
+declare vresultado varchar(10);
+
+select count(*) into vmax from PRODUCTOS;
+set valeatorio = f_aleatorio(1, vmax);
+set valeatorio = valeatorio - 1;
+
+select CODIGO into vresultado from PRODUCTOS limit valeatorio,1;
+
+RETURN vresultado;
+END$$
+
+DELIMITER ;
+
+select f_producto_aleatorio();
+
+/*Creando funcion para obtener vendedor aleatorio*/
+
+DELIMITER $$
+USE `empresa`$$
+CREATE FUNCTION `f_vendedor_aleatorio` ()
+RETURNS varchar(5)
+BEGIN
+declare vmax int;
+declare vresultado varchar(5);
+declare valeatorio int;
+
+select count(*) into vmax from VENDEDORES;
+set valeatorio = f_aleatorio(1,vmax);
+set valeatorio = valeatorio - 1;
+
+select MATRICULA into vresultado from VENDEDORES limit valeatorio,1;
+
+RETURN vresultado;
+END$$
+
+DELIMITER ;
+
+select f_vendedor_aleatorio();
+
