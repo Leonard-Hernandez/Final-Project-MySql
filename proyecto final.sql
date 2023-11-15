@@ -234,3 +234,82 @@ DELIMITER ;
 
 select f_vendedor_aleatorio();
 
+/*Prueba funciones*/
+
+select f_cliente_aleatorio() as cliente, f_producto_aleatorio() as producto, f_vendedor_aleatorio() as vendedor;
+
+/*Arreglando problema clave primaria en la tabla facturas y items*/
+
+	/*Eliminamos las tablas*/
+drop table ITEMS;
+drop table FACTURAS;
+
+
+	/*Creamos la tabla cambiando el tipo de dato de numero a int*/
+create table FACTURAS(
+	NUMERO int NOT NULL,
+    FECHA DATE,
+    DNI VARCHAR(11) NOT NULL,
+    MATRICULA VARCHAR(5)NOT NULL,
+    IMPUESTO FLOAT,
+    PRIMARY KEY (NUMERO),
+    FOREIGN KEY (DNI) REFERENCES CLIENTES(DNI),
+    FOREIGN KEY (MATRICULA) REFERENCES VENDEDORES(MATRICULA)
+    );
+
+create table ITEMS(
+	NUMERO int NOT NULL,
+    CODIGO VARCHAR(10) NOT NULL,
+    CANTIDAD INT,
+    PRECIO FLOAT,
+    PRIMARY KEY (NUMERO, CODIGO),
+    FOREIGN KEY (NUMERO) REFERENCES FACTURAS(NUMERO),
+    FOREIGN KEY (CODIGO) REFERENCES PRODUCTOS(CODIGO)
+    );
+    
+    /*Volvemos a importar desde la otra base de datos*/
+INSERT INTO FACTURAS SELECT NUMERO, FECHA_VENTA AS FECHA, DNI, MATRICULA, IMPUESTO FROM jugos_ventas.facturas;
+
+INSERT INTO ITEMS SELECT NUMERO, CODIGO_DEL_PRODUCTO AS CODIGO, CANTIDAD, PRECIO FROM jugos_ventas.items_facturas;
+
+/*Creando storage procedure para generar facturas automaticamente*/
+
+DELIMITER $$
+USE `empresa`$$
+CREATE PROCEDURE `sp_venta` (fecha date, maxitems int, maxcantidad int)
+BEGIN
+declare vcliente varchar(11);
+declare vproducto varchar(10);
+declare vvendedor varchar(5);
+declare vcantidad int;
+declare vprecio float;
+declare vitems int;
+declare vnfactura int;
+declare vcontador int default 1; 
+
+select max(numero) +1 into vnfactura from FACTURAS;
+set vcliente = f_cliente_aleatorio();
+set vvendedor = f_vendedor_aleatorio();
+
+insert into FACTURAS (NUMERO, FECHA, DNI, MATRICULA, IMPUESTO) values (vnfactura, fecha, vcliente, vvendedor, 0.16);
+
+set vitems = f_aleatorio(1, maxitems);
+
+while vcontador <= vitems
+do
+
+Set vproducto = f_producto_aleatorio();
+set vcantidad = f_aleatorio(1, maxcantidad);
+select PRECIO into vprecio from PRODUCTOS where CODIGO = vproducto;
+
+insert into ITEMS(NUMERO,CODIGO,CANTIDAD,PRECIO) values (vnfactura, vproducto, vcantidad, vprecio);
+
+set vcontador = vcontador + 1;
+
+end while;
+
+END$$
+
+DELIMITER ;
+select max(NUMERO) from FACTURAS;
+call sp_venta('20210619', 3, 100);
