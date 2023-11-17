@@ -313,3 +313,186 @@ END$$
 DELIMITER ;
 select max(NUMERO) from FACTURAS;
 call sp_venta('20210619', 3, 100);
+
+/*Testeando sp_venta*/
+
+	/*cADA VEZ QUE SE EJECUTE ESTE COMANDO EL SELECT DE ABAJO AUMENTA LA FACTURACION*/
+call sp_venta('20210619', 3, 100);
+
+select A.FECHA, SUM(B.CANTIDAD * B.PRECIO) AS FACTURACION 
+FROM FACTURAS A 
+inner join ITEMS B 
+ON A.NUMERO = B.NUMERO
+WHERE A.FECHA = '20210619'
+group by A.FECHA;
+
+/*Arreglando problema de claves duplicadas del sp_ventas*/
+
+DROP procedure IF EXISTS `empresa`.`sp_venta`;
+;
+
+DELIMITER $$
+USE `empresa`$$
+CREATE DEFINER=`root`@`localhost` PROCEDURE `sp_venta`(fecha date, maxitems int, maxcantidad int)
+BEGIN
+declare vcliente varchar(11);
+declare vproducto varchar(10);
+declare vvendedor varchar(5);
+declare vcantidad int;
+declare vprecio float;
+declare vitems int;
+declare vnfactura int;
+declare vcontador int default 1; 
+declare vnumitems int;
+
+select max(numero) +1 into vnfactura from FACTURAS;
+set vcliente = f_cliente_aleatorio();
+set vvendedor = f_vendedor_aleatorio();
+
+insert into FACTURAS (NUMERO, FECHA, DNI, MATRICULA, IMPUESTO) values (vnfactura, fecha, vcliente, vvendedor, 0.16);
+
+set vitems = f_aleatorio(1, maxitems);
+
+while vcontador <= vitems
+do
+
+Set vproducto = f_producto_aleatorio();
+select count(*) into vnumitems from ITEMS where CODIGO = vproducto and NUMERO = vnfactura;
+If vnumitems = 0 then
+	set vcantidad = f_aleatorio(1, maxcantidad);
+	select PRECIO into vprecio from PRODUCTOS where CODIGO = vproducto;
+	insert into ITEMS(NUMERO,CODIGO,CANTIDAD,PRECIO) values (vnfactura, vproducto, vcantidad, vprecio);
+end if;
+set vcontador = vcontador + 1;
+
+end while;
+
+END$$
+
+DELIMITER ;
+;
+
+/*Test*/
+call sp_venta('20210619', 20, 100);
+
+/*En la tabla de facturas tenemos el valor del impuesto. 
+En la tabla de ítems tenemos la cantidad y la facturación. 
+Calcula el valor del impuesto pago en el año de 2021 redondeando al mayor entero.*/
+
+select * from FACTURAS;
+Select * from ITEMS;
+
+Select YEAR(FECHA), CEIL(sum((B.CANTIDAD * B.PRECIO) * A.IMPUESTO)) as Impuestos from FACTURAS A
+inner join ITEMS B 
+on A.NUMERO = B.NUMERO
+Where year(A.FECHA) = '2021';
+
+/*Usando Triggers*/
+
+	/*Creando tabla facturacion*/
+CREATE TABLE FACTURACION(
+FECHA DATE NULL,
+VENTA_TOTAL FLOAT
+);
+	/*Creando triggers sin stored procedure*/
+DELIMITER //
+CREATE TRIGGER TG_FACTURACION_INSERT 
+AFTER INSERT ON ITEMS
+FOR EACH ROW BEGIN
+  DELETE FROM FACTURACION;
+  INSERT INTO FACTURACION
+  SELECT A.FECHA, SUM(B.CANTIDAD * B.PRECIO) AS VENTA_TOTAL
+  FROM FACTURAS A
+  INNER JOIN
+  ITEMS B
+  ON A.NUMERO = B.NUMERO
+  GROUP BY A.FECHA;
+END //
+
+DELIMITER //
+CREATE TRIGGER TG_FACTURACION_DELETE
+AFTER DELETE ON ITEMS
+FOR EACH ROW BEGIN
+  DELETE FROM FACTURACION;
+  INSERT INTO FACTURACION
+  SELECT A.FECHA, SUM(B.CANTIDAD * B.PRECIO) AS VENTA_TOTAL
+  FROM FACTURAS A
+  INNER JOIN
+  ITEMS B
+  ON A.NUMERO = B.NUMERO
+  GROUP BY A.FECHA;
+END //
+
+DELIMITER //
+CREATE TRIGGER TG_FACTURACION_UPDATE
+AFTER UPDATE ON ITEMS
+FOR EACH ROW BEGIN
+  DELETE FROM FACTURACION;
+  INSERT INTO FACTURACION
+  SELECT A.FECHA, SUM(B.CANTIDAD * B.PRECIO) AS VENTA_TOTAL
+  FROM FACTURAS A
+  INNER JOIN
+  ITEMS B
+  ON A.NUMERO = B.NUMERO
+  GROUP BY A.FECHA;
+END //
+
+	/*Test de los triggers*/
+    
+select * from FACTURACION;
+
+call sp_venta('20210622',15,100);
+
+/*Creando triggers con stored procedure (forma mas sostenible)*/
+
+	/*Creamos el stored procedure*/
+DELIMITER $$
+USE `empresa`$$
+CREATE PROCEDURE `sp_triggers` ()
+BEGIN
+  DELETE FROM FACTURACION;
+  INSERT INTO FACTURACION
+  SELECT A.FECHA, SUM(B.CANTIDAD * B.PRECIO) AS VENTA_TOTAL
+  FROM FACTURAS A
+  INNER JOIN
+  ITEMS B
+  ON A.NUMERO = B.NUMERO
+  GROUP BY A.FECHA;
+END$$
+
+DELIMITER ;
+
+	/*Borramos los triggers*/
+    
+drop trigger TG_FACTURACION_INSERT;
+drop trigger TG_FACTURACION_UPDATE;
+drop trigger TG_FACTURACION_DELETE;
+
+	/*Los creamos con el stored procedure*/
+
+DELIMITER //
+CREATE TRIGGER TG_FACTURACION_INSERT 
+AFTER INSERT ON ITEMS
+FOR EACH ROW BEGIN
+	call sp_triggers();
+END //
+
+DELIMITER //
+CREATE TRIGGER TG_FACTURACION_DELETE
+AFTER DELETE ON ITEMS
+FOR EACH ROW BEGIN
+	call sp_triggers();
+END //
+
+DELIMITER //
+CREATE TRIGGER TG_FACTURACION_UPDATE
+AFTER UPDATE ON ITEMS
+FOR EACH ROW BEGIN
+  call sp_triggers();
+END //
+
+/*Test de los triggers*/
+    
+select * from FACTURACION where FECHA = '20210622';
+
+call sp_venta('20210622',15,100);
